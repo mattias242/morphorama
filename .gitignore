@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.swc/
+
+# Backend build
+backend/dist/
+backend/build/
+worker/dist/
+worker/build/
+
+# Uploads and temp files
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/temp/*
+!backend/temp/.gitkeep
+
+# Database
+*.db
+*.sqlite
+postgres_data/
+
+# Docker volumes
+redis_data/
+minio_data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# SSL certificates (except example)
+nginx/ssl/*.pem
+!nginx/ssl/.gitkeep
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+.parcel-cache/
+dist-ssr/
