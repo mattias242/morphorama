@@ -24,14 +24,15 @@ const configSchema = z.object({
   minioUseSsl: z.boolean().default(false),
 
   // AI Providers
-  imageProvider: z.enum(['google-imagen', 'stability-ai']).default('google-imagen'),
+  imageProvider: z.enum(['google-imagen', 'stability-ai', 'huggingface']).default('huggingface'),
   llmProvider: z.enum(['gemini', 'claude']).default('gemini'),
   musicProvider: z.string().default('suno'),
 
-  // API Keys
+  // API Keys (conditional requirements based on providers)
   googleGeminiApiKey: z.string().optional(),
   anthropicApiKey: z.string().optional(),
   stabilityApiKey: z.string().optional(),
+  huggingfaceApiKey: z.string().optional(),
   sunoApiKey: z.string().optional(),
 
   // Instagram
@@ -54,7 +55,7 @@ const configSchema = z.object({
 // Parse and validate configuration
 const parseConfig = () => {
   try {
-    return configSchema.parse({
+    const parsed = configSchema.parse({
       nodeEnv: process.env.NODE_ENV,
       port: process.env.PORT,
       databaseUrl: process.env.DATABASE_URL,
@@ -70,6 +71,7 @@ const parseConfig = () => {
       googleGeminiApiKey: process.env.GOOGLE_GEMINI_API_KEY,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       stabilityApiKey: process.env.STABILITY_API_KEY,
+      huggingfaceApiKey: process.env.HUGGINGFACE_API_KEY,
       sunoApiKey: process.env.SUNO_API_KEY,
       instagramAccessToken: process.env.INSTAGRAM_ACCESS_TOKEN,
       instagramAccountId: process.env.INSTAGRAM_ACCOUNT_ID,
@@ -80,6 +82,42 @@ const parseConfig = () => {
       workerConcurrency: process.env.WORKER_CONCURRENCY,
       scheduleInterval: process.env.SCHEDULE_INTERVAL,
     });
+
+    // Validate provider-specific API keys
+    const missingKeys: string[] = [];
+
+    if (parsed.llmProvider === 'gemini' && !parsed.googleGeminiApiKey) {
+      missingKeys.push('GOOGLE_GEMINI_API_KEY (required for LLM provider: gemini)');
+    }
+
+    if (parsed.llmProvider === 'claude' && !parsed.anthropicApiKey) {
+      missingKeys.push('ANTHROPIC_API_KEY (required for LLM provider: claude)');
+    }
+
+    if (parsed.imageProvider === 'google-imagen' && !parsed.googleGeminiApiKey) {
+      missingKeys.push('GOOGLE_GEMINI_API_KEY (required for image provider: google-imagen)');
+    }
+
+    if (parsed.imageProvider === 'stability-ai' && !parsed.stabilityApiKey) {
+      missingKeys.push('STABILITY_API_KEY (required for image provider: stability-ai)');
+    }
+
+    if (parsed.imageProvider === 'huggingface' && !parsed.huggingfaceApiKey) {
+      missingKeys.push('HUGGINGFACE_API_KEY (required for image provider: huggingface)');
+    }
+
+    if (missingKeys.length > 0) {
+      console.error('❌ Missing required API keys:');
+      missingKeys.forEach((key) => {
+        console.error(`  - ${key}`);
+      });
+      console.error('\nCurrent provider configuration:');
+      console.error(`  - LLM Provider: ${parsed.llmProvider}`);
+      console.error(`  - Image Provider: ${parsed.imageProvider}`);
+      process.exit(1);
+    }
+
+    return parsed;
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('❌ Configuration validation failed:');

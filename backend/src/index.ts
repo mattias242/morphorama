@@ -9,6 +9,7 @@ import uploadRoutes from './routes/upload.routes';
 import moderationRoutes from './routes/moderation.routes';
 import photoRoutes from './routes/photos.routes';
 import authRoutes from './routes/auth.routes';
+import evolutionRoutes from './routes/evolution.routes';
 import { requireAuth } from './middleware/auth.middleware';
 import { generalLimiter } from './middleware/rate-limit';
 import { initializeStorage } from './services/init-storage';
@@ -106,6 +107,9 @@ app.use('/api/photos', photoRoutes);
 
 // Moderation routes (protected)
 app.use('/api/moderation', requireAuth, moderationRoutes);
+
+// Evolution routes (protected - for testing)
+app.use('/api/evolution', requireAuth, evolutionRoutes);
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

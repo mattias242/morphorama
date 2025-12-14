@@ -1,7 +1,9 @@
 /**
- * Evolution Processor
+ * Evolution Processor - "Telephone Game" Experiment
  *
- * Handles the 60-iteration photo evolution workflow
+ * Handles iterative image regeneration to observe AI drift/mutation
+ * Each iteration: takes previous image → regenerates with static prompt → repeat
+ * No creative prompting - just pure iterative img2img to see how the image evolves
  */
 
 import { Job } from 'bullmq';
@@ -10,7 +12,6 @@ import { evolutionRepository } from '../../database/repositories/evolution.repos
 import { evolutionFrameRepository } from '../../database/repositories/evolution-frame.repository';
 import { photoRepository } from '../../database/repositories/photo.repository';
 import { storageService } from '../../services/storage.service';
-import { llmProvider } from '../../services/ai/llm';
 import { imageProvider } from '../../services/ai/image';
 
 export interface EvolutionJobData {
@@ -57,32 +58,23 @@ export async function processEvolution(job: Job<EvolutionJobData>): Promise<Evol
     await evolutionRepository.updateStatus(evolutionId, 'processing');
 
     // 5. Start evolution loop (60 iterations)
+    // Using a static prompt for the "telephone game" experiment
+    const STATIC_PROMPT = 'Recreate this image exactly as it appears, maintaining all details, colors, composition, and style';
     let previousFrameBuffer = sourceImageBuffer;
-    let previousPrompt: string | undefined;
 
     for (let iteration = 1; iteration <= evolution.total_iterations; iteration++) {
       console.log(`\n📍 Iteration ${iteration}/${evolution.total_iterations}`);
       console.log(`─────────────────────────────────────────────────────────`);
 
       try {
-        // Step A: Generate prompt using LLM (with vision)
-        console.log(`🤖 Analyzing image and generating prompt...`);
-        const promptResult = await llmProvider.analyzeImageAndGeneratePrompt({
-          imageBuffer: previousFrameBuffer,
-          iteration,
-          previousPrompt,
-        });
+        // Simple telephone game: Image → AI regeneration → repeat
+        console.log(`🎨 Regenerating image (telephone game iteration)...`);
+        console.log(`💡 Prompt: "${STATIC_PROMPT}"`);
 
-        console.log(`💡 Prompt: "${promptResult.prompt}"`);
-        previousPrompt = promptResult.prompt;
-
-        // Step B: Generate image from prompt
-        console.log(`🎨 Generating image...`);
         const imageResult = await imageProvider.generateImage({
-          prompt: promptResult.prompt,
+          prompt: STATIC_PROMPT,
+          sourceImage: previousFrameBuffer, // img2img with previous iteration
           aspectRatio: '1:1',
-          // Optional: could use sourceImage for img2img
-          // sourceImage: previousFrameBuffer,
         });
 
         // Step C: Get image metadata
@@ -105,11 +97,10 @@ export async function processEvolution(job: Job<EvolutionJobData>): Promise<Evol
           iteration_number: iteration,
           file_path: framePath,
           file_size: imageResult.imageBuffer.length,
-          width: imageMetadata.width || null,
-          height: imageMetadata.height || null,
-          prompt_used: promptResult.prompt,
-          generation_time_ms: (imageResult.metadata?.generationTimeMs || 0) +
-                              (promptResult.metadata?.generationTimeMs || 0),
+          width: imageMetadata.width,
+          height: imageMetadata.height,
+          prompt_used: STATIC_PROMPT,
+          generation_time_ms: imageResult.metadata?.generationTimeMs || 0,
           provider: imageResult.metadata?.model || 'unknown',
           model_version: imageResult.metadata?.model,
         });
@@ -149,14 +140,9 @@ export async function processEvolution(job: Job<EvolutionJobData>): Promise<Evol
             await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Exponential backoff
 
             // Retry the failed iteration
-            const promptResult = await llmProvider.analyzeImageAndGeneratePrompt({
-              imageBuffer: previousFrameBuffer,
-              iteration,
-              previousPrompt,
-            });
-
             const imageResult = await imageProvider.generateImage({
-              prompt: promptResult.prompt,
+              prompt: STATIC_PROMPT,
+              sourceImage: previousFrameBuffer,
               aspectRatio: '1:1',
             });
 
@@ -172,18 +158,16 @@ export async function processEvolution(job: Job<EvolutionJobData>): Promise<Evol
               iteration_number: iteration,
               file_path: framePath,
               file_size: imageResult.imageBuffer.length,
-              width: imageMetadata.width || null,
-              height: imageMetadata.height || null,
-              prompt_used: promptResult.prompt,
-              generation_time_ms: (imageResult.metadata?.generationTimeMs || 0) +
-                                  (promptResult.metadata?.generationTimeMs || 0),
+              width: imageMetadata.width,
+              height: imageMetadata.height,
+              prompt_used: STATIC_PROMPT,
+              generation_time_ms: imageResult.metadata?.generationTimeMs || 0,
               provider: imageResult.metadata?.model || 'unknown',
               model_version: imageResult.metadata?.model,
             });
 
             await evolutionRepository.updateProgress(evolutionId, iteration);
             previousFrameBuffer = imageResult.imageBuffer;
-            previousPrompt = promptResult.prompt;
 
             console.log(`✅ Retry successful for iteration ${iteration}`);
             break; // Success, exit retry loop

@@ -1,12 +1,13 @@
 /**
  * Google Imagen Image Generation Service
  *
- * Uses Google's Imagen 3 model for AI image generation
+ * Uses Google's Imagen 3 model via Gemini API for AI image generation
+ * Simpler approach using the same API key as Gemini LLM
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import sharp from 'sharp';
-import { config } from '../../config';
+import { config } from '../../../config';
 import {
   IImageProvider,
   ImageGenerationOptions,
@@ -30,59 +31,78 @@ export class GoogleImagenService implements IImageProvider {
     const startTime = Date.now();
 
     try {
-      console.log(`🖼️  Generating image with Imagen...`);
+      console.log(`🖼️  Generating image with Imagen via Gemini API...`);
       console.log(`   Prompt: "${options.prompt.substring(0, 100)}..."`);
 
-      // Note: Google's Imagen API structure may vary
-      // This implementation assumes Vertex AI or similar structure
-      // May need adjustment based on actual API availability
-
-      // For now, we'll use a Gemini image generation approach
-      // In production, this would use the dedicated Imagen API endpoint
+      // Use the Imagen model through Gemini API
       const model = this.client.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp', // Gemini can generate images in some contexts
+        model: this.modelName,
       });
 
-      // Build the generation prompt
-      let generationPrompt = options.prompt;
+      // Build the generation request
+      const generationConfig: any = {
+        temperature: 1,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 8192,
+      };
 
-      if (options.negativePrompt) {
-        generationPrompt += `\n\nAvoid: ${options.negativePrompt}`;
+      // Generate image from text prompt
+      const result = await model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: options.prompt }]
+        }],
+        generationConfig,
+      });
+
+      const response = result.response;
+
+      // Extract image data from response
+      // The response format may vary, but typically contains base64 image data
+      // or a URL to the generated image
+
+      // Check if response has inline data (base64 image)
+      let imageBuffer: Buffer;
+
+      if (response.candidates && response.candidates[0]?.content?.parts) {
+        const parts = response.candidates[0].content.parts;
+
+        // Look for inline data in the response
+        for (const part of parts) {
+          if ((part as any).inlineData) {
+            const inlineData = (part as any).inlineData;
+            imageBuffer = Buffer.from(inlineData.data, 'base64');
+            break;
+          }
+        }
       }
 
-      // Note: This is a placeholder implementation
-      // The actual Imagen API will be different
-      // Google Imagen typically requires REST API calls or Vertex AI SDK
+      if (!imageBuffer!) {
+        // If no inline data, try to get image from text response
+        // Some models return URLs or other formats
+        const text = response.text();
 
-      // For a working implementation, we would make an HTTP request to:
-      // https://us-central1-aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict
+        // Try to extract base64 data if present in text
+        const base64Match = text.match(/data:image\/[^;]+;base64,([^"]+)/);
+        if (base64Match) {
+          imageBuffer = Buffer.from(base64Match[1], 'base64');
+        } else {
+          throw new Error('No image data found in response. Response: ' + text.substring(0, 200));
+        }
+      }
 
-      // As a temporary solution, we'll throw an error with guidance
-      throw new Error(
-        'Google Imagen API requires Vertex AI setup. ' +
-        'Please use Vertex AI SDK or REST API for production. ' +
-        'Temporary workaround: Consider using Gemini image understanding ' +
-        'with alternative image generation service, or implement Vertex AI integration.'
-      );
-
-      // Placeholder for when proper API is implemented:
-      /*
-      const response = await this.callImagenAPI({
-        prompt: generationPrompt,
-        aspectRatio: options.aspectRatio || '1:1',
-        seed: options.seed,
-      });
-
-      const imageBuffer = Buffer.from(response.imageData, 'base64');
+      // Get image metadata
       const metadata = await sharp(imageBuffer).metadata();
-
       const generationTimeMs = Date.now() - startTime;
 
-      console.log(`✅ Image generated in ${generationTimeMs}ms (${metadata.width}x${metadata.height})`);
+      console.log(
+        `✅ Image generated in ${generationTimeMs}ms (${metadata.width}x${metadata.height})`
+      );
 
       return {
         imageBuffer,
-        mimeType: `image/${metadata.format}`,
+        mimeType: `image/${metadata.format || 'png'}`,
         width: metadata.width || 1024,
         height: metadata.height || 1024,
         metadata: {
@@ -91,38 +111,40 @@ export class GoogleImagenService implements IImageProvider {
           seed: options.seed,
         },
       };
-      */
-
     } catch (error: any) {
       console.error('❌ Imagen generation failed:', error.message);
+
+      // Provide helpful error message
+      if (error.message.includes('not found') || error.message.includes('not supported')) {
+        throw new Error(
+          'Imagen model not accessible via this API key. ' +
+          'Imagen 3 may require a paid API tier or special access. ' +
+          'Consider using Stability AI as an alternative, or check your API key permissions at ' +
+          'https://aistudio.google.com/'
+        );
+      }
+
       throw new Error(`Failed to generate image: ${error.message}`);
     }
   }
 
   async validateApiKey(): Promise<boolean> {
     try {
-      // Validation would check Vertex AI/Imagen API access
-      // For now, we validate Gemini access as a proxy
-      const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-      const result = await model.generateContent('Test');
-      return !!result.response.text();
+      // Validate by checking if we can access the Imagen model
+      const model = this.client.getGenerativeModel({ model: this.modelName });
+
+      // Try a simple generation
+      const result = await model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: 'test' }]
+        }]
+      });
+
+      return !!result.response;
     } catch (error: any) {
-      console.error('❌ Google API key validation failed:', error.message);
+      console.error('❌ Google Imagen API key validation failed:', error.message);
       return false;
     }
-  }
-
-  /**
-   * Helper to call Imagen API via HTTP
-   * (To be implemented with proper Vertex AI credentials)
-   */
-  private async callImagenAPI(params: {
-    prompt: string;
-    aspectRatio: string;
-    seed?: number;
-  }): Promise<any> {
-    // This would make an authenticated HTTP request to Vertex AI
-    // Requires project ID, region, and service account credentials
-    throw new Error('Vertex AI integration not yet implemented');
   }
 }

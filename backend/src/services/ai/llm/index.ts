@@ -4,7 +4,7 @@
  * Exports the configured LLM provider based on application config
  */
 
-import { config } from '../../config';
+import { config } from '../../../config';
 import { ILLMProvider } from '../interfaces/llm-provider.interface';
 import { GeminiService } from './gemini.service';
 

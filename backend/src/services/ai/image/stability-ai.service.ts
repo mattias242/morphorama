@@ -6,7 +6,7 @@
  */
 
 import sharp from 'sharp';
-import { config } from '../../config';
+import { config } from '../../../config';
 import {
   IImageProvider,
   ImageGenerationOptions,
