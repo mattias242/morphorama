@@ -19,8 +19,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@google/generative-ai": "^0.20.0",
-    "@aws-sdk/client-s3": "^3.600.0",
-    "axios": "^1.6.0",
+    "@aws-sdk/client-s3": "^3.995.0",
+    "axios": "^1.13.5",
     "bullmq": "^5.0.0",
     "dotenv": "^16.4.0",
     "fluent-ffmpeg": "^2.1.2",
